@@ -12,6 +12,9 @@ Msp430::Msp430() :
 {
 	_last_PC = 0;
 	_cpu_regs.PC = 0xC000;
+
+	for (uint8_t i = 4; i < _cpu_regs._count; i++)
+		_cpu_regs.R[i] = 0xCDCD;
 }
 
 
@@ -42,11 +45,13 @@ int32_t Msp430::load_fw(const std::string & fw_filename)
 
 	length = file_length(i_fw);
 
-	if (length > _memspace.code_size())
+	if (length > _memspace.code_size() + sizeof(uint16_t))
 	{
 		i_fw.close();
 		throw std::length_error("firmware size is greater than code section size");
 	}
+
+	i_fw.read((char *)&_cpu_regs.PC, sizeof(_cpu_regs.PC));
 
 	i_fw.read((char *)_memspace.code_ptr(), length);
 
@@ -390,7 +395,7 @@ inline bool Msp430::formatII(SingleOperand_t sop)
 	int16_t src_val = 0, src_ofst = 0;
 	uint16_t *src_addr = nullptr;
 
-	reg = _memspace.addr_ptr(sop.ds_reg);
+	reg = get_reg_ptr(sop.ds_reg);
 
 	if (((sop.ds_reg == 2) && (sop.ad > 1)) || sop.ds_reg == 3)
 	{
@@ -614,7 +619,7 @@ inline bool Msp430::SUBC(uint16_t *src, uint16_t *dst, const InstructionLenght_t
 	uint16_t mask = (1 << i_len) - 1;
 	
 	val = (*dst & mask) + (src_val & mask) + _cpu_regs.SR.C;
-	_cpu_regs.SR.V = is_v(val, i_len, src, dst);
+	_cpu_regs.SR.V = is_v(val, i_len, &src_val, dst);
 	*dst = cnz(val, i_len);
 
 	return true;
